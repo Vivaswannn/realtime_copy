@@ -14,7 +14,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 io.on('connection', function(socket){
     console.log('a user connected');
+
+    socket.on('send-location', function(data){
+        console.log('Location received:', data);
+        io.emit('receive-location', {id: socket.id, ...data});
+    });
+
+    socket.on('disconnect', function(){
+        console.log('user disconnected');
+    });
 })
+
+
 
 app.get('/' , function(req, res) {
     res.render('index');
