@@ -24,10 +24,16 @@ function startWatchingLocation(){
         return;
     }
     setStatus('Requesting location...');
-    watchId = navigator.geolocation.watchPosition((position)=>{
+    const onPosition = (position) => {
         const {latitude, longitude} = position.coords;
         socket.emit('send-location', {latitude, longitude});
         setStatus('Location active');
+    };
+    // Send one immediate reading if available
+    navigator.geolocation.getCurrentPosition(onPosition, ()=>{}, { enableHighAccuracy: true, timeout: 5000 });
+
+    watchId = navigator.geolocation.watchPosition((position)=>{
+        onPosition(position);
     }, (error)=>{
         console.error(error);
         if(error.code === error.PERMISSION_DENIED){
