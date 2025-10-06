@@ -1,17 +1,44 @@
 const socket = io();
 
-if(navigator.geolocation){
+const statusEl = document.getElementById('status');
+const enableBtn = document.getElementById('enableLocation');
+
+function setStatus(message){
+    if(statusEl){
+        statusEl.textContent = message;
+    }
+}
+
+function startWatchingLocation(){
+    if(!navigator.geolocation){
+        setStatus('Geolocation is not supported by your browser');
+        return;
+    }
+    setStatus('Requesting location...');
     navigator.geolocation.watchPosition((position)=>{
         const {latitude, longitude} = position.coords;
         socket.emit('send-location', {latitude, longitude});
+        setStatus('Location active');
     }, (error)=>{
         console.error(error);
-    },
-{
+        if(error.code === error.PERMISSION_DENIED){
+            setStatus('Permission denied. Enable location in browser settings.');
+        } else if(error.code === error.POSITION_UNAVAILABLE){
+            setStatus('Location unavailable. Move outdoors or check GPS.');
+        } else if(error.code === error.TIMEOUT){
+            setStatus('Location request timed out.');
+        } else {
+            setStatus('Location error.');
+        }
+    },{
         enableHighAccuracy: true,
         maximumAge: 0,
-        timeout: 5000
-})
+        timeout: 10000
+    });
+}
+
+if(enableBtn){
+    enableBtn.addEventListener('click', startWatchingLocation);
 }
 
 const map = L.map("map").setView([0,0], 16);
