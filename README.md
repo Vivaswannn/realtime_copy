@@ -41,3 +41,28 @@ This is a real-time tracking application built with Node.js, Express, Socket.io,
 2. In Railway, create a new project → Deploy from GitHub → select your repo.
 3. Set Start Command to `npm start` (no build command required).
 4. Deploy and test using the public URL on two devices/browsers.
+
+## Docker
+
+Build and run locally:
+
+```bash
+docker build -t realtime-tracker .
+docker run -p 3000:3000 -e PORT=3000 --name realtime-tracker --rm realtime-tracker
+```
+
+Then open `http://localhost:3000`.
+
+## Jenkins CI (Docker image)
+
+The included `Jenkinsfile` builds the app and Docker image, and can optionally push to a registry.
+
+- Required on the Jenkins agent: Docker and Node (for npm install).
+- Optional env vars (set in Jenkins job):
+  - `DOCKER_REGISTRY` (e.g., `docker.io/youruser`)
+  - `DOCKER_CREDENTIALS_ID` (Jenkins username/password credentials for registry)
+
+Pipeline stages:
+- Install deps (`npm ci`)
+- Docker build: `realtime-tracker:${BUILD_NUMBER}`
+- If registry vars provided: tag and push `:${BUILD_NUMBER}` and `:latest`
