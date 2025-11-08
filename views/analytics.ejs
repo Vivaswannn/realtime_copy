@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Location Analytics - Real-Time Tracker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" 
+  integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw==" 
+  crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #f5f5f5;
+    }
+
+    .header {
+      background: #0d6efd;
+      color: white;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .header a {
+      color: white;
+      text-decoration: none;
+      opacity: 0.9;
+    }
+
+    .header a:hover {
+      opacity: 1;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .stat-card h3 {
+      font-size: 0.875rem;
+      color: #666;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: bold;
+      color: #0d6efd;
+    }
+
+    .map-container {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+      overflow: hidden;
+    }
+
+    #map {
+      width: 100%;
+      height: 500px;
+    }
+
+    .controls {
+      padding: 1rem;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      margin-bottom: 2rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .controls button {
+      padding: 0.5rem 1rem;
+      background: #0d6efd;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+
+    .controls button:hover {
+      background: #0b5ed7;
+    }
+
+    .controls input {
+      padding: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 0.875rem;
+    }
+
+    .active-users {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      padding: 1.5rem;
+    }
+
+    .active-users h2 {
+      margin-bottom: 1rem;
+      color: #333;
+    }
+
+    .user-list {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .user-item {
+      padding: 0.75rem;
+      background: #f8f9fa;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .user-item .socket-id {
+      font-family: monospace;
+      font-size: 0.875rem;
+      color: #666;
+    }
+
+    .user-item .count {
+      font-weight: bold;
+      color: #0d6efd;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 2rem;
+      color: #666;
+    }
+
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Location Analytics</h1>
+    <a href="/">← Back to Tracker</a>
+  </div>
+
+  <div class="container">
+    <div id="error-container"></div>
+    
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <h3>Total Locations</h3>
+        <div class="value" id="total-locations">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Total Users</h3>
+        <div class="value" id="total-users">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Last 24 Hours</h3>
+        <div class="value" id="last-24h">-</div>
+      </div>
+      <div class="stat-card">
+        <h3>Last Hour</h3>
+        <div class="value" id="last-hour">-</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="refresh-btn">Refresh Data</button>
+      <button id="history-btn">Load History on Map</button>
+      <input type="number" id="history-limit" placeholder="Limit (default: 1000)" value="1000" style="width: 150px;">
+      <input type="datetime-local" id="start-date" placeholder="Start Date">
+      <input type="datetime-local" id="end-date" placeholder="End Date">
+      <span style="color: #666; font-size: 0.875rem;" id="time-range"></span>
+    </div>
+
+    <div class="map-container">
+      <div id="map"></div>
+    </div>
+
+    <div class="active-users">
+      <h2>Most Active Users</h2>
+      <div id="user-list" class="loading">Loading...</div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" 
+  crossorigin="anonymous"></script>
+
+  <script>
+    // Wait for DOM to be ready
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Initializing map and functions...');
+      
+      const map = L.map('map').setView([0, 0], 2);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: "OpenStreetMap"
+      }).addTo(map);
+
+      window.map = map; // Make map globally accessible
+      window.markers = [];
+      window.polylines = {};
+
+      function showError(message) {
+        const container = document.getElementById('error-container');
+        container.innerHTML = `<div class="error">${message}</div>`;
+        setTimeout(() => {
+          container.innerHTML = '';
+        }, 5000);
+      }
+
+      window.showError = showError; // Make globally accessible
+      
+      async function loadAnalytics() {
+        console.log('loadAnalytics called');
+        try {
+          console.log('Fetching analytics...');
+        const response = await fetch('/api/analytics');
+        console.log('Response status:', response.status);
+        if (!response.ok) throw new Error('Failed to fetch analytics');
+        
+        const data = await response.json();
+        console.log('Analytics data received:', data);
+        
+        document.getElementById('total-locations').textContent = data.totalLocations.toLocaleString();
+        document.getElementById('total-users').textContent = data.totalUsers.toLocaleString();
+        document.getElementById('last-24h').textContent = data.last24Hours.toLocaleString();
+        document.getElementById('last-hour').textContent = data.lastHour.toLocaleString();
+
+        if (data.timeRange && data.timeRange.earliest) {
+          const earliest = new Date(data.timeRange.earliest);
+          const latest = new Date(data.timeRange.latest);
+          document.getElementById('time-range').textContent = 
+            `Data range: ${earliest.toLocaleString()} to ${latest.toLocaleString()}`;
+        }
+
+        // Display active users
+        const userList = document.getElementById('user-list');
+        if (data.activeUsers && data.activeUsers.length > 0) {
+          userList.innerHTML = data.activeUsers.map(user => `
+            <div class="user-item">
+              <span class="socket-id">${user.socket_id}</span>
+              <span class="count">${user.location_count} locations</span>
+            </div>
+          `).join('');
+        } else {
+          userList.innerHTML = '<div class="loading">No user data available</div>';
+        }
+        } catch (error) {
+          console.error('Error loading analytics:', error);
+          showError('Failed to load analytics data');
+        }
+      }
+
+      async function loadHistory() {
+        console.log('loadHistory called');
+        try {
+          // Show loading state
+        const mapContainer = document.getElementById('map');
+        const loadingMsg = document.createElement('div');
+        loadingMsg.id = 'loading-msg';
+        loadingMsg.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 1rem; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); z-index: 2000;';
+        loadingMsg.textContent = 'Loading history...';
+        mapContainer.parentElement.style.position = 'relative';
+        mapContainer.parentElement.appendChild(loadingMsg);
+
+        const limit = document.getElementById('history-limit').value || 1000;
+        let startDate = document.getElementById('start-date').value;
+        let endDate = document.getElementById('end-date').value;
+
+        // Convert datetime-local format to SQLite-compatible format
+        // datetime-local returns: "2025-11-08T11:00"
+        // SQLite needs: "2025-11-08 11:00:00" or "2025-11-08T11:00:00"
+        if (startDate) {
+          startDate = startDate.replace('T', ' ') + ':00';
+        }
+        if (endDate) {
+          endDate = endDate.replace('T', ' ') + ':00';
+        }
+
+        let url = `/api/history?limit=${limit}`;
+        if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
+        if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+
+        const response = await fetch(url);
+        const responseText = await response.text();
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch history: ${response.status} - ${responseText}`);
+        }
+        
+        let history;
+        try {
+          history = JSON.parse(responseText);
+        } catch (jsonError) {
+          throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}`);
+        }
+        
+        if (!Array.isArray(history)) {
+          throw new Error('Expected array but got: ' + typeof history);
+        }
+
+        // Clear existing markers
+        window.markers.forEach(marker => window.map.removeLayer(marker));
+        window.markers = [];
+        Object.values(window.polylines).forEach(polyline => window.map.removeLayer(polyline));
+        window.polylines = {};
+
+        if (history.length === 0) {
+          showError('No location history found');
+          return;
+        }
+
+        // Group by socket_id for polylines
+        const userPaths = {};
+        history.forEach(point => {
+          if (!userPaths[point.socket_id]) {
+            userPaths[point.socket_id] = [];
+          }
+          userPaths[point.socket_id].push([point.latitude, point.longitude]);
+        });
+
+        // Create markers and polylines
+        const bounds = [];
+        Object.entries(userPaths).forEach(([socketId, path]) => {
+          // Create polyline for path
+          const polyline = L.polyline(path, {
+            color: '#' + Math.floor(Math.random()*16777215).toString(16),
+            weight: 2,
+            opacity: 0.7
+          }).addTo(window.map);
+          window.polylines[socketId] = polyline;
+
+          // Add markers for start and end
+          if (path.length > 0) {
+            const startMarker = L.marker(path[0], {
+              icon: L.divIcon({
+                className: 'start-marker',
+                html: '<div style="background: green; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
+                iconSize: [12, 12]
+              })
+            }).addTo(window.map);
+            window.markers.push(startMarker);
+
+            if (path.length > 1) {
+              const endMarker = L.marker(path[path.length - 1], {
+                icon: L.divIcon({
+                  className: 'end-marker',
+                  html: '<div style="background: red; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
+                  iconSize: [12, 12]
+                })
+              }).addTo(window.map);
+              window.markers.push(endMarker);
+          }
+
+            bounds.push(...path);
+          }
+        });
+
+        // Fit map to show all locations
+        if (bounds.length > 0) {
+          window.map.fitBounds(bounds, { padding: [50, 50] });
+        } else {
+          showError('No location data to display on map');
+        }
+
+        // Remove loading message
+        const loadingMsgEl = document.getElementById('loading-msg');
+        if (loadingMsgEl) loadingMsgEl.remove();
+      } catch (error) {
+        console.error('Error loading history:', error);
+        showError('Failed to load location history: ' + error.message);
+        
+        // Remove loading message
+        const loadingMsgEl2 = document.getElementById('loading-msg');
+        if (loadingMsgEl2) loadingMsgEl2.remove();
+      }
+    }
+
+      // Wire up button event listeners
+      const refreshBtn = document.getElementById('refresh-btn');
+      const historyBtn = document.getElementById('history-btn');
+      
+      if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+          console.log('Refresh button clicked');
+          loadAnalytics();
+        });
+        console.log('Refresh button wired up');
+      } else {
+        console.error('Refresh button not found!');
+      }
+      
+      if (historyBtn) {
+        historyBtn.addEventListener('click', () => {
+          console.log('History button clicked');
+          loadHistory();
+        });
+        console.log('History button wired up');
+      } else {
+        console.error('History button not found!');
+      }
+      
+      // Make functions globally accessible (for debugging)
+      window.loadAnalytics = loadAnalytics;
+      window.loadHistory = loadHistory;
+      
+      // Load analytics on page load
+      console.log('Page loaded, calling loadAnalytics...');
+      loadAnalytics().catch(err => {
+        console.error('Error in initial loadAnalytics:', err);
+        showError('Failed to load initial analytics: ' + err.message);
+      });
+
+      // Auto-refresh every 30 seconds
+      setInterval(() => {
+        console.log('Auto-refreshing analytics...');
+        loadAnalytics().catch(err => console.error('Error in auto-refresh:', err));
+      }, 30000);
+    }); // End DOMContentLoaded
+  </script>
+</body>
+</html>
+

@@ -30,3 +30,9 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Database
+data/
+*.db
+*.db-shm
+*.db-wal

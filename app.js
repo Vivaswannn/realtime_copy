@@ -6,6 +6,9 @@ const socketIo = require('socket.io');
 const http = require('http');
 const server = http.createServer(app);
 
+// Database module
+const db = require('./db');
+
 // CORS configuration - allow specific origins in production
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*';
 
@@ -96,6 +99,10 @@ io.on('connection', function(socket){
         try {
             console.log('Location received:', data);
             latestLocations.set(socket.id, data);
+            
+            // Save to database
+            db.saveLocation(socket.id, data.latitude, data.longitude);
+            
             io.emit('receive-location', {id: socket.id, ...data});
         } catch (error) {
             console.error('Error processing location:', error);
@@ -117,12 +124,60 @@ io.on('connection', function(socket){
 
 // Health check endpoint
 app.get('/health', function(req, res) {
+    const analytics = db.getAnalytics();
     res.json({ 
         status: 'ok', 
         timestamp: new Date().toISOString(),
         activeConnections: io.engine.clientsCount,
-        trackedUsers: latestLocations.size
+        trackedUsers: latestLocations.size,
+        database: {
+            totalLocations: analytics ? analytics.totalLocations : 0,
+            totalUsers: analytics ? analytics.totalUsers : 0
+        }
     });
+});
+
+// Analytics endpoint - get summary statistics
+app.get('/api/analytics', function(req, res) {
+    try {
+        const analytics = db.getAnalytics();
+        res.json(analytics);
+    } catch (error) {
+        console.error('Error fetching analytics:', error);
+        res.status(500).json({ error: 'Failed to fetch analytics' });
+    }
+});
+
+// Get location history for a specific user
+app.get('/api/history/:socketId', function(req, res) {
+    try {
+        const socketId = req.params.socketId;
+        const limit = parseInt(req.query.limit) || 100;
+        const history = db.getLocationHistory(socketId, limit);
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching location history:', error);
+        res.status(500).json({ error: 'Failed to fetch location history' });
+    }
+});
+
+// Get all location history (with optional date filters)
+app.get('/api/history', function(req, res) {
+    try {
+        const limit = parseInt(req.query.limit) || 1000;
+        const startDate = req.query.startDate || null;
+        const endDate = req.query.endDate || null;
+        const history = db.getAllLocationHistory(limit, startDate, endDate);
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching all location history:', error);
+        res.status(500).json({ error: 'Failed to fetch location history' });
+    }
+});
+
+// Analytics page
+app.get('/analytics', function(req, res) {
+    res.render('analytics');
 });
 
 app.get('/', function(req, res) {

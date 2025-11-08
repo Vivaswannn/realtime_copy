@@ -7,3 +7,7 @@ npm-debug.log
 coverage
 **/tmp
 **/.cache
+data/
+*.db
+*.db-shm
+*.db-wal
