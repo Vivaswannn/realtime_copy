@@ -176,7 +176,11 @@
 <body>
   <div class="header">
     <h1>Location Analytics</h1>
-    <a href="/">← Back to Tracker</a>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+      <a href="/" style="color: white; text-decoration: none; opacity: 0.9;">← Back to Tracker</a>
+      <span style="color: white; opacity: 0.7;">|</span>
+      <a href="/analytics/logout" style="color: white; text-decoration: none; opacity: 0.9;">Logout</a>
+    </div>
   </div>
 
   <div class="container">
@@ -275,7 +279,14 @@
         if (data.activeUsers && data.activeUsers.length > 0) {
           userList.innerHTML = data.activeUsers.map(user => `
             <div class="user-item">
-              <span class="socket-id">${user.socket_id}</span>
+              <div style="flex: 1;">
+                <div style="font-family: monospace; font-size: 0.75rem; color: #666; margin-bottom: 0.25rem;">
+                  ${user.socket_id}
+                </div>
+                <div style="font-size: 0.75rem; color: #999;">
+                  ${user.ip_address && user.ip_address !== 'unknown' ? `IP: ${user.ip_address}` : 'IP: Unknown (old data or not captured)'} | ${user.user_agent && user.user_agent !== 'unknown' ? user.user_agent.substring(0, 50) + '...' : 'Browser: Unknown'}
+                </div>
+              </div>
               <span class="count">${user.location_count} locations</span>
             </div>
           `).join('');

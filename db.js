@@ -26,6 +26,8 @@ function initializeDatabase() {
             socket_id TEXT NOT NULL,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     `);
@@ -39,6 +41,8 @@ function initializeDatabase() {
         CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             socket_id TEXT UNIQUE NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
             first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
             location_count INTEGER DEFAULT 0
@@ -55,24 +59,24 @@ function initializeDatabase() {
 initializeDatabase();
 
 // Save location to database
-function saveLocation(socketId, latitude, longitude) {
+function saveLocation(socketId, latitude, longitude, ipAddress = null, userAgent = null) {
     try {
         // Insert location
         const insertLocation = db.prepare(`
-            INSERT INTO locations (socket_id, latitude, longitude)
-            VALUES (?, ?, ?)
+            INSERT INTO locations (socket_id, latitude, longitude, ip_address, user_agent)
+            VALUES (?, ?, ?, ?, ?)
         `);
-        insertLocation.run(socketId, latitude, longitude);
+        insertLocation.run(socketId, latitude, longitude, ipAddress, userAgent);
 
         // Update or insert session
         const upsertSession = db.prepare(`
-            INSERT INTO sessions (socket_id, last_seen, location_count)
-            VALUES (?, CURRENT_TIMESTAMP, 1)
+            INSERT INTO sessions (socket_id, ip_address, user_agent, last_seen, location_count)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1)
             ON CONFLICT(socket_id) DO UPDATE SET
                 last_seen = CURRENT_TIMESTAMP,
                 location_count = location_count + 1
         `);
-        upsertSession.run(socketId);
+        upsertSession.run(socketId, ipAddress, userAgent);
 
         return true;
     } catch (error) {
@@ -158,7 +162,9 @@ function getAnalytics() {
         const activeUsers = db.prepare(`
             SELECT socket_id, COUNT(*) as location_count, 
                    MIN(timestamp) as first_seen, 
-                   MAX(timestamp) as last_seen
+                   MAX(timestamp) as last_seen,
+                   MAX(ip_address) as ip_address,
+                   MAX(user_agent) as user_agent
             FROM locations
             GROUP BY socket_id
             ORDER BY location_count DESC
