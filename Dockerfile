@@ -1,23 +1,21 @@
-# syntax=docker/dockerfile:1
+# Use Node.js 18 Alpine as base image (lightweight)
 FROM node:18-alpine
+
+# Set working directory inside container
 WORKDIR /app
 
-# Install build dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
-
-# Install dependencies with caching
+# Copy package files and install dependencies
 COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
+RUN npm install --omit=dev
 
-# Copy source
+# Copy all source files into container
 COPY . .
 
-# Create data directory for database persistence
-RUN mkdir -p /app/data
+# Create data directory for SQLite database
+RUN mkdir -p data
 
-# Expose port
+# Expose app port
 EXPOSE 3000
 
-# Use volume for database persistence (mount at runtime)
-# Example: docker run -v $(pwd)/data:/app/data ...
+# Start the application
 CMD ["npm", "start"]

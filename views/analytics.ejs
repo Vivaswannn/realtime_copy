@@ -214,8 +214,37 @@
       <span style="color: #666; font-size: 0.875rem;" id="time-range"></span>
     </div>
 
+    <!-- Charts Section -->
+    <div class="charts-section" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+      <div class="chart-card" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 1rem; color: #333;">Activity Over Time (Last 24 Hours)</h3>
+        <canvas id="hourlyChart" style="max-height: 300px;"></canvas>
+      </div>
+      
+      <div class="chart-card" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 1rem; color: #333;">Daily Activity (Last 7 Days)</h3>
+        <canvas id="dailyChart" style="max-height: 300px;"></canvas>
+      </div>
+      
+      <div class="chart-card" style="background: white; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 1rem; color: #333;">Activity by Hour (All Time)</h3>
+        <canvas id="hourlyPatternChart" style="max-height: 300px;"></canvas>
+      </div>
+    </div>
+
     <div class="map-container">
+      <div style="background: white; padding: 1rem; border-radius: 8px 8px 0 0; display: flex; gap: 1rem; align-items: center;">
+        <h3 style="margin: 0; flex: 1;">Location Map</h3>
+        <button id="toggle-heatmap" style="padding: 0.5rem 1rem; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Show Heat Map</button>
+        <button id="toggle-paths" style="padding: 0.5rem 1rem; background: #0d6efd; color: white; border: none; border-radius: 4px; cursor: pointer;">Show Paths</button>
+      </div>
       <div id="map"></div>
+    </div>
+
+    <!-- Behavior Patterns Section -->
+    <div class="behavior-patterns" style="background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 1.5rem; margin-top: 2rem;">
+      <h2 style="margin-bottom: 1rem; color: #333;">Behavior Patterns</h2>
+      <div id="behavior-content" class="loading">Loading behavior patterns...</div>
     </div>
 
     <div class="active-users">
@@ -226,6 +255,12 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" 
   crossorigin="anonymous"></script>
+  
+  <!-- Chart.js for interactive charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  
+  <!-- Leaflet Heatmap plugin for density maps -->
+  <script src="https://cdn.jsdelivr.net/gh/Leaflet/Leaflet.heat@gh-pages/dist/leaflet-heat.js"></script>
 
   <script>
     // Wait for DOM to be ready
@@ -240,6 +275,13 @@
       window.map = map; // Make map globally accessible
       window.markers = [];
       window.polylines = {};
+      window.heatLayer = null;
+      window.showingHeatMap = false;
+      
+      // Chart instances
+      let hourlyChart = null;
+      let dailyChart = null;
+      let hourlyPatternChart = null;
 
       function showError(message) {
         const container = document.getElementById('error-container');
@@ -261,6 +303,9 @@
         
         const data = await response.json();
         console.log('Analytics data received:', data);
+        
+        // Store data for heat map access
+        window.analyticsData = data;
         
         document.getElementById('total-locations').textContent = data.totalLocations.toLocaleString();
         document.getElementById('total-users').textContent = data.totalUsers.toLocaleString();
@@ -293,9 +338,246 @@
         } else {
           userList.innerHTML = '<div class="loading">No user data available</div>';
         }
+
+        // Create/Update Charts
+        createCharts(data);
+
+        // Display Behavior Patterns
+        displayBehaviorPatterns(data);
+
         } catch (error) {
           console.error('Error loading analytics:', error);
           showError('Failed to load analytics data');
+        }
+      }
+
+      // Create interactive charts
+      function createCharts(data) {
+        // Hourly Activity Chart (Last 24 Hours)
+        const hourlyCtx = document.getElementById('hourlyChart');
+        if (hourlyCtx) {
+          const hourlyLabels = [];
+          const hourlyData = [];
+          
+          // Create array for all 24 hours
+          for (let i = 0; i < 24; i++) {
+            const hour = String(i).padStart(2, '0');
+            hourlyLabels.push(hour + ':00');
+            const hourData = data.hourlyActivity?.find(h => h.hour === hour);
+            hourlyData.push(hourData ? hourData.count : 0);
+          }
+
+          if (hourlyChart) {
+            hourlyChart.destroy();
+          }
+          
+          hourlyChart = new Chart(hourlyCtx, {
+            type: 'line',
+            data: {
+              labels: hourlyLabels,
+              datasets: [{
+                label: 'Location Updates',
+                data: hourlyData,
+                borderColor: 'rgb(13, 110, 253)',
+                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                tension: 0.4,
+                fill: true
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: {
+                legend: { display: false }
+              },
+              scales: {
+                y: { beginAtZero: true }
+              }
+            }
+          });
+        }
+
+        // Daily Activity Chart (Last 7 Days)
+        const dailyCtx = document.getElementById('dailyChart');
+        if (dailyCtx && data.dailyActivity) {
+          if (dailyChart) {
+            dailyChart.destroy();
+          }
+
+          dailyChart = new Chart(dailyCtx, {
+            type: 'bar',
+            data: {
+              labels: data.dailyActivity.map(d => {
+                const date = new Date(d.date);
+                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+              }),
+              datasets: [{
+                label: 'Locations',
+                data: data.dailyActivity.map(d => d.count),
+                backgroundColor: 'rgba(13, 110, 253, 0.6)',
+                borderColor: 'rgb(13, 110, 253)',
+                borderWidth: 1
+              }, {
+                label: 'Unique Users',
+                data: data.dailyActivity.map(d => d.unique_users),
+                backgroundColor: 'rgba(40, 167, 69, 0.6)',
+                borderColor: 'rgb(40, 167, 69)',
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              scales: {
+                y: { beginAtZero: true }
+              }
+            }
+          });
+        }
+
+        // Hourly Pattern Chart (All Time)
+        const patternCtx = document.getElementById('hourlyPatternChart');
+        if (patternCtx && data.hourlyPattern) {
+          if (hourlyPatternChart) {
+            hourlyPatternChart.destroy();
+          }
+
+          const patternLabels = [];
+          const patternData = [];
+          
+          for (let i = 0; i < 24; i++) {
+            const hour = String(i).padStart(2, '0');
+            patternLabels.push(hour + ':00');
+            const hourData = data.hourlyPattern.find(h => h.hour === hour);
+            patternData.push(hourData ? hourData.activity_count : 0);
+          }
+
+          hourlyPatternChart = new Chart(patternCtx, {
+            type: 'bar',
+            data: {
+              labels: patternLabels,
+              datasets: [{
+                label: 'Activity Count',
+                data: patternData,
+                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                borderColor: 'rgb(255, 99, 132)',
+                borderWidth: 1
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: {
+                legend: { display: false }
+              },
+              scales: {
+                y: { beginAtZero: true }
+              }
+            }
+          });
+        }
+      }
+
+      // Display Behavior Patterns
+      function displayBehaviorPatterns(data) {
+        const behaviorContent = document.getElementById('behavior-content');
+        if (!behaviorContent) return;
+
+        if (!data.movementPattern || data.movementPattern.length === 0) {
+          behaviorContent.innerHTML = '<div class="loading">No behavior pattern data available</div>';
+          return;
+        }
+
+        let html = '<div style="display: grid; gap: 1rem;">';
+        
+        // Peak Activity Hours
+        if (data.hourlyPattern && data.hourlyPattern.length > 0) {
+          const sortedHours = [...data.hourlyPattern].sort((a, b) => b.activity_count - a.activity_count);
+          const peakHours = sortedHours.slice(0, 3);
+          
+          html += '<div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">';
+          html += '<h4 style="margin-bottom: 0.5rem; color: #333;">Peak Activity Hours</h4>';
+          html += '<div style="display: flex; gap: 1rem; flex-wrap: wrap;">';
+          peakHours.forEach(h => {
+            html += `<span style="background: white; padding: 0.5rem 1rem; border-radius: 4px; font-weight: bold;">${h.hour}:00 (${h.activity_count} updates)</span>`;
+          });
+          html += '</div></div>';
+        }
+
+        // Movement Patterns
+        html += '<div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">';
+        html += '<h4 style="margin-bottom: 0.5rem; color: #333;">Movement Patterns</h4>';
+        html += '<div style="display: grid; gap: 0.5rem;">';
+        data.movementPattern.slice(0, 5).forEach(pattern => {
+          const hours = Math.round(pattern.hours_active * 10) / 10;
+          const avgUpdatesPerHour = pattern.hours_active > 0 ? Math.round((pattern.update_count / pattern.hours_active) * 10) / 10 : 0;
+          html += `<div style="background: white; padding: 0.75rem; border-radius: 4px; display: flex; justify-content: space-between;">`;
+          html += `<div><strong>User:</strong> ${pattern.socket_id.substring(0, 20)}...</div>`;
+          html += `<div><strong>Updates:</strong> ${pattern.update_count} | <strong>Active:</strong> ${hours}h | <strong>Rate:</strong> ${avgUpdatesPerHour}/hr</div>`;
+          html += `</div>`;
+        });
+        html += '</div></div>';
+
+        // Activity Trends
+        if (data.dailyActivity && data.dailyActivity.length > 1) {
+          const trend = data.dailyActivity[data.dailyActivity.length - 1].count - data.dailyActivity[0].count;
+          const trendText = trend > 0 ? 'increasing' : trend < 0 ? 'decreasing' : 'stable';
+          const trendColor = trend > 0 ? '#28a745' : trend < 0 ? '#dc3545' : '#6c757d';
+          
+          html += '<div style="background: #f8f9fa; padding: 1rem; border-radius: 4px;">';
+          html += '<h4 style="margin-bottom: 0.5rem; color: #333;">Activity Trend (Last 7 Days)</h4>';
+          html += `<div style="color: ${trendColor}; font-weight: bold;">Trend: ${trendText} (${trend > 0 ? '+' : ''}${trend} locations)</div>`;
+          html += '</div>';
+        }
+
+        html += '</div>';
+        behaviorContent.innerHTML = html;
+      }
+
+      // Heat Map functionality
+      function showHeatMap(data) {
+        if (!data.locationDensity || data.locationDensity.length === 0) {
+          showError('No density data available');
+          return;
+        }
+
+        // Remove existing heat layer
+        if (window.heatLayer) {
+          window.map.removeLayer(window.heatLayer);
+        }
+
+        // Create heat points
+        const heatPoints = data.locationDensity.map(point => [
+          point.lat,
+          point.lng,
+          point.density / 10 // Normalize intensity
+        ]);
+
+        window.heatLayer = L.heatLayer(heatPoints, {
+          radius: 25,
+          blur: 15,
+          maxZoom: 17,
+          gradient: {
+            0.0: 'blue',
+            0.5: 'yellow',
+            1.0: 'red'
+          }
+        }).addTo(window.map);
+
+        // Fit map to heat points
+        if (heatPoints.length > 0) {
+          const bounds = heatPoints.map(p => [p[0], p[1]]);
+          window.map.fitBounds(bounds, { padding: [50, 50] });
+        }
+
+        window.showingHeatMap = true;
+      }
+
+      function hideHeatMap() {
+        if (window.heatLayer) {
+          window.map.removeLayer(window.heatLayer);
+          window.heatLayer = null;
+          window.showingHeatMap = false;
         }
       }
 
@@ -448,6 +730,46 @@
         console.error('History button not found!');
       }
       
+      // Wire up heat map toggle buttons
+      const toggleHeatmapBtn = document.getElementById('toggle-heatmap');
+      const togglePathsBtn = document.getElementById('toggle-paths');
+      
+      if (toggleHeatmapBtn) {
+        toggleHeatmapBtn.addEventListener('click', () => {
+          if (window.showingHeatMap) {
+            hideHeatMap();
+            toggleHeatmapBtn.textContent = 'Show Heat Map';
+            toggleHeatmapBtn.style.background = '#28a745';
+          } else {
+            if (window.analyticsData) {
+              showHeatMap(window.analyticsData);
+              toggleHeatmapBtn.textContent = 'Hide Heat Map';
+              toggleHeatmapBtn.style.background = '#dc3545';
+            } else {
+              showError('Please refresh data first');
+            }
+          }
+        });
+      }
+
+      if (togglePathsBtn) {
+        togglePathsBtn.addEventListener('click', () => {
+          // Toggle visibility of polylines
+          const hasVisiblePaths = Object.values(window.polylines).some(p => window.map.hasLayer(p));
+          Object.values(window.polylines).forEach(polyline => {
+            if (hasVisiblePaths) {
+              if (window.map.hasLayer(polyline)) {
+                window.map.removeLayer(polyline);
+              }
+            } else {
+              if (!window.map.hasLayer(polyline)) {
+                polyline.addTo(window.map);
+              }
+            }
+          });
+        });
+      }
+
       // Make functions globally accessible (for debugging)
       window.loadAnalytics = loadAnalytics;
       window.loadHistory = loadHistory;

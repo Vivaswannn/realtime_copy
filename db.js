@@ -177,13 +177,80 @@ function getAnalytics() {
             FROM locations
         `).get();
 
+        // Activity over time (last 24 hours, hourly breakdown)
+        const hourlyActivity = db.prepare(`
+            SELECT 
+                strftime('%H', timestamp) as hour,
+                COUNT(*) as count
+            FROM locations
+            WHERE timestamp >= datetime('now', '-1 day')
+            GROUP BY strftime('%H', timestamp)
+            ORDER BY hour
+        `).all();
+
+        // Activity by day (last 7 days)
+        const dailyActivity = db.prepare(`
+            SELECT 
+                DATE(timestamp) as date,
+                COUNT(*) as count,
+                COUNT(DISTINCT socket_id) as unique_users
+            FROM locations
+            WHERE timestamp >= datetime('now', '-7 days')
+            GROUP BY DATE(timestamp)
+            ORDER BY date
+        `).all();
+
+        // Location density data (for heat map)
+        const locationDensity = db.prepare(`
+            SELECT 
+                ROUND(latitude, 2) as lat,
+                ROUND(longitude, 2) as lng,
+                COUNT(*) as density
+            FROM locations
+            WHERE timestamp >= datetime('now', '-1 day')
+            GROUP BY ROUND(latitude, 2), ROUND(longitude, 2)
+            HAVING density > 1
+            ORDER BY density DESC
+            LIMIT 100
+        `).all();
+
+        // Behavior patterns - hourly distribution
+        const hourlyPattern = db.prepare(`
+            SELECT 
+                strftime('%H', timestamp) as hour,
+                COUNT(*) as activity_count
+            FROM locations
+            GROUP BY strftime('%H', timestamp)
+            ORDER BY hour
+        `).all();
+
+        // Movement patterns - average distance between updates
+        const movementPattern = db.prepare(`
+            SELECT 
+                socket_id,
+                COUNT(*) as update_count,
+                MIN(timestamp) as first_update,
+                MAX(timestamp) as last_update,
+                (julianday(MAX(timestamp)) - julianday(MIN(timestamp))) * 24 as hours_active
+            FROM locations
+            GROUP BY socket_id
+            HAVING update_count > 1
+            ORDER BY update_count DESC
+            LIMIT 10
+        `).all();
+
         return {
             totalLocations: totalLocations.count,
             totalUsers: totalUsers.count,
             last24Hours: last24h.count,
             lastHour: lastHour.count,
             activeUsers: activeUsers,
-            timeRange: timeRange
+            timeRange: timeRange,
+            hourlyActivity: hourlyActivity,
+            dailyActivity: dailyActivity,
+            locationDensity: locationDensity,
+            hourlyPattern: hourlyPattern,
+            movementPattern: movementPattern
         };
     } catch (error) {
         console.error('Error fetching analytics:', error);

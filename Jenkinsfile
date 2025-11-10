@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'Node23'   // 👈 this name must match what you configure in Jenkins Global Tool Configuration
+        nodejs 'Node23'   
     }
 
     options {
